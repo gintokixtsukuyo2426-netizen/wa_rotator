@@ -67,23 +67,7 @@
   // URL web app dari Apps Script (berakhiran /exec)
   const API_URL = 'https://script.google.com/macros/s/AKfycbzuwu--if6qM-2noPwhKM_llrdYAso4Jn8qRhPL0PSa8mUJgMY5chE5j8vhcoy_DArE/exec';
   // ID Meta Pixel (angka) dari Events Manager. Biarkan apa adanya jika belum punya.
-  const PIXEL_ID = '<!-- Meta Pixel Code -->
-<script>
-!function(f,b,e,v,n,t,s)
-{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-n.queue=[];t=b.createElement(e);t.async=!0;
-t.src=v;s=b.getElementsByTagName(e)[0];
-s.parentNode.insertBefore(t,s)}(window, document,'script',
-'https://connect.facebook.net/en_US/fbevents.js');
-fbq('init', '1222009649987306');
-fbq('track', 'PageView');
-</script>
-<noscript><img height="1" width="1" style="display:none"
-src="https://www.facebook.com/tr?id=1222009649987306&ev=PageView&noscript=1"
-/></noscript>
-<!-- End Meta Pixel Code -->';
+  const PIXEL_ID = '1222009649987306';
   // Pesan awal yang otomatis terisi di chat
   const PESAN = 'Halo, saya ingin bertanya.';
   // Jeda (ms) agar event Pixel sempat terkirim sebelum pindah ke WhatsApp
