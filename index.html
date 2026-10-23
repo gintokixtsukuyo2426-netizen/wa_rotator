@@ -105,7 +105,8 @@
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
-      const url = 'https://wa.me/' + data.nomor + '?text=' + encodeURIComponent(PESAN);
+            const pesanKustom = (q.get('text') || '').slice(0, 1000);
+      const url = 'https://wa.me/' + data.nomor + '?text=' + encodeURIComponent(pesanKustom || PESAN);
       tombol.href = url;
       tombol.hidden = false;
 
