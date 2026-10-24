@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heatmap Landing Page</title>
+<style>
+  :root {
+    --bg: #f5f7f6; --kartu: #ffffff; --teks: #1d2b25; --samar: #5d6b64;
+    --garis: #dde5e0; --hijau: #1a7f4b; --bar: #cfe8da;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121a16; --kartu: #1a2520; --teks: #e8efeb; --samar: #9aa8a1;
+      --garis: #2b3a33; --hijau: #35b274; --bar: #24453a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px; background: var(--bg); color: var(--teks);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.5;
+  }
+  h1 { margin: 0 0 12px; font-size: 1.4rem; }
+  h2 { margin: 20px 0 8px; font-size: 1rem; }
+  h2:first-child { margin-top: 0; }
+  .filter { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 12px; }
+  label { font-size: 0.9rem; color: var(--samar); }
+  select {
+    margin-left: 6px; padding: 6px 8px; border-radius: 6px; font: inherit;
+    border: 1px solid var(--garis); background: var(--kartu); color: var(--teks);
+  }
+  #status { color: var(--samar); margin: 0 0 12px; }
+  .ringkas { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .angka { background: var(--kartu); border: 1px solid var(--garis); border-radius: 10px; padding: 10px 14px; }
+  .angka b { display: block; font-size: 1.4rem; }
+  .angka span { color: var(--samar); font-size: 0.85rem; }
+  .layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) 20rem; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  .panggung { position: relative; width: 100%; overflow: hidden; background: var(--kartu); border: 1px solid var(--garis); border-radius: 10px; }
+  .skala { position: relative; transform-origin: top left; }
+  iframe { display: block; border: 0; background: #fff; }
+  canvas { position: absolute; left: 0; top: 0; pointer-events: none; }
+  .samping { background: var(--kartu); border: 1px solid var(--garis); border-radius: 10px; padding: 14px 16px; }
+  .baris { display: grid; grid-template-columns: 3rem 1fr 3rem; gap: 8px; align-items: center; font-size: 0.85rem; margin-bottom: 4px; }
+  .baris .wadah { background: var(--bar); border-radius: 4px; height: 12px; overflow: hidden; }
+  .baris .isi { background: var(--hijau); height: 100%; }
+  .baris .nilai { text-align: right; color: var(--samar); }
+  ol { margin: 0; padding-left: 1.2rem; font-size: 0.85rem; }
+  ol li { margin-bottom: 6px; overflow-wrap: anywhere; }
+  ol li span { color: var(--samar); }
+</style>
+</head>
+<body>
+<h1>Heatmap landing page</h1>
+<div class="filter">
+  <label>Perangkat <select id="f-perangkat"></select></label>
+  <label>Kampanye <select id="f-kampanye"></select></label>
+  <label><input type="checkbox" id="f-tampil" checked> Tampilkan heatmap</label>
+</div>
+<p id="status">Memuat data…</p>
+<section class="ringkas" id="ringkas"></section>
+<div class="layout">
+  <div class="panggung" id="panggung">
+    <div class="skala" id="skala">
+      <iframe id="frame" title="Landing page" scrolling="no"></iframe>
+      <canvas id="hm"></canvas>
+    </div>
+  </div>
+  <aside class="samping">
+    <h2>Scroll depth</h2>
+    <div id="scroll"></div>
+    <h2>Elemen paling sering diklik</h2>
+    <ol id="top"></ol>
+  </aside>
+</div>
+
+<script>
+(function () {
+  // === PENGATURAN ===
+  const API_URL = 'https://script.google.com/macros/s/AKfycbzuwu--if6qM-2noPwhKM_llrdYAso4Jn8qRhPL0PSa8mUJgMY5chE5j8vhcoy_DArE/exec';           // URL /exec yang sama
+  const LANDING_URL = 'https://gintokixtsukuyo2426-netizen.github.io/tenongan-bu-tutik/';   // alamat landing page-mu
+  const HALAMAN = 'landing';                                  // sama dengan di tracker.js
+  // ==================
+
+  const $ = function (id) { return document.getElementById(id); };
+  const q = new URLSearchParams(location.search);
+  const palet = buatPalet();
+  let KLIK = [];
+  let SESI = [];
+  let ukuran = { vw: 390, dh: 3000 };
+
+  function buatPalet() {
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 1;
+    const x = c.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 256, 0);
+    g.addColorStop(0.0, '#2b50ff');
+    g.addColorStop(0.25, '#00d5ff');
+    g.addColorStop(0.5, '#2ee66b');
+    g.addColorStop(0.75, '#ffe500');
+    g.addColorStop(1.0, '#ff2a1a');
+    x.fillStyle = g;
+    x.fillRect(0, 0, 256, 1);
+    return x.getImageData(0, 0, 256, 1).data;
+  }
+
+  function median(a) {
+    if (!a.length) return 0;
+    const s = a.slice().sort(function (x, y) { return x - y; });
+    return s[Math.floor(s.length / 2)];
+  }
+
+  function buat(tag, teks, kelas) {
+    const e = document.createElement(tag);
+    if (teks !== undefined) e.textContent = teks; // textContent: aman dari teks berbahaya
+    if (kelas) e.className = kelas;
+    return e;
+  }
+
+  function terpilih() {
+    const p = $('f-perangkat').value;
+    const k = $('f-kampanye').value;
+    const cocok = function (r) { return r.h === HALAMAN && r.p === p && (!k || r.k === k); };
+    return { klik: KLIK.filter(cocok), sesi: SESI.filter(cocok) };
+  }
+
+  function perSesi(sesi) {
+    const m = {};
+    sesi.forEach(function (r) {
+      const a = m[r.s] || (m[r.s] = { sc: 0, d: 0, n: 0 });
+      a.sc = Math.max(a.sc, r.sc);
+      a.d = Math.max(a.d, r.d);
+      a.n = Math.max(a.n, r.n);
+    });
+    return Object.keys(m).map(function (k) { return m[k]; });
+  }
+
+  function render() {
+    const hasil = terpilih();
+    const ses = perSesi(hasil.sesi);
+    const klik = hasil.klik;
+
+    // Ringkasan
+    const rata = ses.length ? Math.round(ses.reduce(function (t, s) { return t + s.sc; }, 0) / ses.length) : 0;
+    const ring = $('ringkas');
+    ring.textContent = '';
+    [[ses.length, 'Kunjungan'], [klik.length, 'Klik'], [rata + '%', 'Rata-rata scroll'],
+     [median(ses.map(function (s) { return s.d; })) + ' dtk', 'Durasi median']].forEach(function (a) {
+      const k = buat('div', undefined, 'angka');
+      k.appendChild(buat('b', String(a[0])));
+      k.appendChild(buat('span', a[1]));
+      ring.appendChild(k);
+    });
+
+    // Scroll depth
+    const sc = $('scroll');
+    sc.textContent = '';
+    for (let t = 10; t <= 100; t += 10) {
+      const n = ses.filter(function (s) { return s.sc >= t; }).length;
+      const persen = ses.length ? Math.round(n / ses.length * 100) : 0;
+      const baris = buat('div', undefined, 'baris');
+      const wadah = buat('div', undefined, 'wadah');
+      const isi = buat('div', undefined, 'isi');
+      isi.style.width = persen + '%';
+      wadah.appendChild(isi);
+      baris.appendChild(buat('span', t + '%'));
+      baris.appendChild(wadah);
+      baris.appendChild(buat('span', persen + '%', 'nilai'));
+      sc.appendChild(baris);
+    }
+
+    // Elemen paling sering diklik
+    const hitung = {};
+    klik.forEach(function (r) { hitung[r.el] = (hitung[r.el] || 0) + 1; });
+    const urut = Object.keys(hitung).sort(function (a, b) { return hitung[b] - hitung[a]; }).slice(0, 10);
+    const daftar = $('top');
+    daftar.textContent = '';
+    if (!urut.length) daftar.appendChild(buat('li', 'Belum ada data klik.'));
+    urut.forEach(function (el) {
+      const li = buat('li', el + ' ');
+      li.appendChild(buat('span', '(' + hitung[el] + ' klik)'));
+      daftar.appendChild(li);
+    });
+
+    // Ukuran halaman: median lebar dan tinggi dari data perangkat ini
+    const p = $('f-perangkat').value;
+    const lebar = median(klik.map(function (r) { return r.vw; }).concat(hasil.sesi.map(function (r) { return r.vw; })).filter(Boolean));
+    const tinggi = median(klik.map(function (r) { return r.dh; }).concat(hasil.sesi.map(function (r) { return r.dh; })).filter(Boolean));
+    const maksY = klik.reduce(function (m, r) { return Math.max(m, r.y); }, 0);
+    ukuran.vw = lebar || (p === 'mobile' ? 390 : 1280);
+    ukuran.dh = Math.min(16000, Math.max(600, tinggi || 3000, maksY + 100));
+
+    atur();
+    gambar(klik);
+    $('status').textContent = ses.length || klik.length
+      ? 'Data: ' + ses.length + ' kunjungan, ' + klik.length + ' klik (maks. 5000 baris terbaru).'
+      : 'Belum ada data untuk filter ini.';
+  }
+
+  // Menyesuaikan ukuran iframe dan kanvas, lalu mengecilkan agar muat di layar
+  function atur() {
+    const frame = $('frame');
+    const skala = $('skala');
+    const panggung = $('panggung');
+    frame.style.width = ukuran.vw + 'px';
+    frame.style.height = ukuran.dh + 'px';
+    skala.style.width = ukuran.vw + 'px';
+    skala.style.height = ukuran.dh + 'px';
+    const s = Math.min(1, panggung.clientWidth / ukuran.vw);
+    skala.style.transform = 'scale(' + s + ')';
+    panggung.style.height = Math.round(ukuran.dh * s) + 'px';
+    if (LANDING_URL.indexOf('http') === 0 && frame.getAttribute('src') !== LANDING_URL) {
+      frame.setAttribute('src', LANDING_URL);
+    }
+  }
+
+  // Menggambar titik panas: kumpulkan bayangan, lalu beri warna dari palet
+  function gambar(titik) {
+    const cv = $('hm');
+    cv.width = ukuran.vw;
+    cv.height = ukuran.dh;
+    const ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (!titik.length) return;
+
+    const r = ukuran.vw < 600 ? 22 : 32;
+    const a = Math.min(0.5, Math.max(0.05, 3 / Math.sqrt(titik.length)));
+    titik.forEach(function (t) {
+      const x = t.x * ukuran.vw;
+      const y = t.y;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, 'rgba(0,0,0,' + a + ')');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    });
+
+    const img = ctx.getImageData(0, 0, cv.width, cv.height);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const al = d[i + 3];
+      if (!al) continue;
+      const k = al * 4;
+      d[i] = palet[k];
+      d[i + 1] = palet[k + 1];
+      d[i + 2] = palet[k + 2];
+      d[i + 3] = Math.min(215, 40 + al);
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  function isiFilter(id, nilai, semua) {
+    const s = $(id);
+    s.textContent = '';
+    if (semua) {
+      const o = buat('option', 'Semua');
+      o.value = '';
+      s.appendChild(o);
+    }
+    nilai.forEach(function (v) {
+      const o = buat('option', v || '(tanpa nama)');
+      o.value = v;
+      s.appendChild(o);
+    });
+  }
+
+  async function muat() {
+    if (API_URL.indexOf('script.google.com') === -1) {
+      $('status').textContent = 'Isi dulu API_URL di heatmap.html.';
+      return;
+    }
+    const kunci = q.get('kunci') || prompt('Masukkan kunci heatmap:') || '';
+    try {
+      const res = await fetch(API_URL + '?action=heatmap&kunci=' + encodeURIComponent(kunci));
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      KLIK = data.klik;
+      SESI = data.sesi;
+    } catch (err) {
+      console.error(err);
+      $('status').textContent = 'Gagal memuat: ' + (err.message || 'periksa URL dan kunci.');
+      return;
+    }
+
+    // Isi pilihan filter dari data; perangkat dengan klik terbanyak jadi pilihan awal
+    const sedia = KLIK.concat(SESI).filter(function (r) { return r.h === HALAMAN; });
+    const perangkat = ['mobile', 'desktop'];
+    isiFilter('f-perangkat', perangkat, false);
+    const nM = sedia.filter(function (r) { return r.p === 'mobile'; }).length;
+    $('f-perangkat').value = nM >= sedia.length - nM ? 'mobile' : 'desktop';
+    const kampanye = Array.from(new Set(sedia.map(function (r) { return r.k; }).filter(Boolean))).sort();
+    isiFilter('f-kampanye', kampanye, true);
+    render();
+  }
+
+  $('f-perangkat').addEventListener('change', render);
+  $('f-kampanye').addEventListener('change', render);
+  $('f-tampil').addEventListener('change', function () {
+    $('hm').style.display = this.checked ? 'block' : 'none';
+  });
+  window.addEventListener('resize', atur);
+
+  muat();
+})();
+</script>
+</body>
+</html>
